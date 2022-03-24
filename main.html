@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS Game</title>
+</head>
+<body>
+    <canvas id="playground" style="border: 1px solid black;"></canvas>
+    <div>
+        <button onclick="createFrame()">Start</button>
+        <button onclick="pauseFrame()">Pause/Play</button>
+        <span id="timer"></span>
+    </div>
+</body>
+
+<script>
+    let initTime, playTime, pausedAt;
+
+    let animationFrameReq;
+
+    let paused = false;
+    function pauseFrame(){
+        paused = !paused;
+        if(!paused){
+            animationFrameReq = window.requestAnimationFrame(DrawFrame);
+        }
+    }
+
+    let playground = document.getElementById("playground");
+    playground.height = 500;
+    playground.width = 400;
+
+    let frame;
+
+    function Frame(){
+        return {
+            hero: {
+                r: 8,
+                x: playground.width/2,
+                y: playground.height - 8,
+                color: '#34a853'
+            },
+            enemy:[],
+            bullet:[],
+            createEnemy(x, y, r, color, speed, playTime){
+                this.enemy.push({
+                    r: r?r:this.hero.r*2,
+                    x: x,
+                    y: y?y:-30,
+                    color: color?color:'red',
+                    speed: speed?speed:0.5,
+                    playTime: playTime?playTime:0
+                })
+            },
+            moveEnemy(){
+                this.enemy = this.enemy.map((en) => {
+                    en.y = en.y + en.speed;
+                    getRand = randomIntFromInterval(1, 6);
+                    if(getRand%2==0 && en.x>en.r){
+                        en.x = en.x - getRand;
+                    }
+                    else if(en.x < playground.width-en.r){
+                        en.x = en.x + getRand;
+                    }
+                    return en;
+                })
+            },
+            createBullet(playTime){
+                this.bullet.push({
+                    r: 1,
+                    x: this.hero.x,
+                    y: this.hero.y,
+                    color: '#2b2b2b',
+                    speed: 4,
+                    playTime: playTime?playTime:0
+                })
+            },
+            moveBullet(){
+                this.bullet = this.bullet.map((bullet) => {
+                    bullet.y = bullet.y - bullet.speed;
+                    return bullet;
+                })
+            }
+        }
+    }
+
+    function randomIntFromInterval(min, max) { // min and max included 
+        return Math.floor(Math.random() * (max - min + 1) + min)
+    }
+
+    function triggerBullet(playTime){
+        let gap = 300;
+        if((playTime%gap)/gap >= 0.9 && playTime-frame.bullet[frame.bullet.length-1].playTime>100){
+            frame.createBullet(playTime);
+        }
+    }
+
+    function triggerEnemy(playTime){
+        if(frame.enemy.length==0){
+            alert("You Won!");
+            createFrame();
+            return;
+        }
+
+        let gap = 1000;
+        if((playTime%gap)/gap >= 0.9 && playTime-frame.enemy[frame.enemy.length-1].playTime>100){
+            let x = randomIntFromInterval(frame.hero.r*2, playground.width-frame.hero.r*2);
+            let r = randomIntFromInterval(5, 15);
+            frame.createEnemy(x, null, r, null, null, playTime);
+        }
+    }
+
+    function draw(ctx, obj, image){
+        ctx.beginPath();
+        ctx.arc(obj.x, obj.y, obj.r, 0, Math.PI * 2);
+        ctx.fillStyle = obj.color;
+        ctx.fill();
+        if(image){
+            var img = new Image();
+            img.src = image;
+            ctx.drawImage(img, obj.x-obj.r, obj.y-obj.r);
+        }
+    }
+
+    let lastFrameTime = 0;
+    function DrawFrame(){
+        let currentTime = (new Date()).getTime();
+        let totalPausedTime = 0;
+
+        if(pausedAt){
+            totalPausedTime = currentTime - pausedAt;
+        }
+        
+        if(lastFrameTime){
+            playTime = playTime + (currentTime - lastFrameTime) - totalPausedTime;
+            if(totalPausedTime){
+                pausedAt = 0;
+            }
+        }
+        lastFrameTime = currentTime;
+
+        triggerBullet(playTime);
+        triggerEnemy(playTime);
+
+        let ctx = playground.getContext("2d");
+        ctx.clearRect(0, 0, playground.width, playground.height);
+
+        draw(ctx, frame.hero, 'tank.png');
+
+        frame.enemy.forEach(en=>{
+            draw(ctx, en);
+        })
+
+        frame.bullet.forEach(bt=>{
+            draw(ctx, bt);
+        })
+
+        frame.moveBullet();
+        frame.moveEnemy();
+
+        eventChecker();
+
+        if(!paused){
+            document.getElementById('timer').innerText = playTime;
+            animationFrameReq = window.requestAnimationFrame(DrawFrame);
+        }
+        else{
+            pausedAt = currentTime;
+        }
+    }
+
+    function eventChecker(){
+        function isTouchingBullet(en, enemyIndex){
+            frame.bullet.forEach((bt, i) => {
+                let xDist = bt.x-en.x;
+                let yDist = bt.y-en.y;
+                if(bt.y<0){
+                    frame.bullet.splice(i, 1);
+                }
+                if(Math.sqrt( xDist*xDist + yDist*yDist ) <= bt.r+en.r){
+                    // touched
+                    frame.bullet.splice(i, 1);
+                    frame.enemy.splice(enemyIndex, 1);
+                }
+            })
+        }
+
+        function isTouchingGround(en){
+            if(en.y+en.r >= playground.height){
+                window.cancelAnimationFrame(animationFrameReq);
+                alert("Game Over");
+                createFrame();
+            }
+        }
+
+        frame.enemy.forEach((en, i) => {
+            isTouchingBullet(en, i);
+            isTouchingGround(en);
+        })
+    }
+
+    function createFrame(){
+        initTime = 0;
+        playTime = 0;
+        pausedAt = 0;
+
+        frame = null;
+        frame = new Frame();
+        frame.createEnemy(30);
+        frame.createBullet();
+
+        animationFrameReq = window.requestAnimationFrame(DrawFrame);
+
+        initTime = (new Date()).getTime();
+
+        keyPressSnoopStart();
+    }
+
+    function keyPressSnoopStart(){
+        document.onkeydown = function(evt) {
+            evt = evt || window.event;
+            var charCode = evt.keyCode;
+
+            let dist = 10;
+            if(charCode==37){ // left
+                if(frame.hero.x > frame.hero.r){
+                    frame.hero.x = frame.hero.x - dist;
+                }
+            }
+            else if(charCode==39){ // right
+                if(frame.hero.x < playground.width-frame.hero.r){
+                    frame.hero.x = frame.hero.x + dist;
+                }
+            }
+        };
+    }
+
+
+</script>
+
+</html>
