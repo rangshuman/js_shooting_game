@@ -1,2 +1,2 @@
-# JavaScript shooting game
+# Js Shooting Game
 A JavaScript based shooting game.
